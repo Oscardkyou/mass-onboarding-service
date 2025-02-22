@@ -122,7 +122,9 @@
         }
 
         function connectWebSocket() {
-            const ws = new WebSocket('wss://www.foqus-portal.live/ws');
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsHost = window.location.host;
+            const ws = new WebSocket(`${wsProtocol}//${wsHost}/ws`);
 
             ws.onopen = () => {
                 console.log('WebSocket connection established');
@@ -146,10 +148,6 @@
                 try {
                     const data = JSON.parse(event.data);
                     console.log('Received message:', data);
-                    if (data.status === 'success' && data.data) {
-                        // Обработка успешного ответа
-                        console.log('Successfully processed data:', data.data);
-                    }
                 } catch (error) {
                     console.error('Error processing WebSocket message:', error);
                 }
