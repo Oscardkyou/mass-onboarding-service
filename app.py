@@ -6,6 +6,10 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import os
 import logging
 
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
@@ -33,33 +37,41 @@ class User(db.Model):
 # Обработка ошибок
 @app.errorhandler(404)
 def not_found_error(error):
+    logger.error(f"404 Error: {request.url}")
     return render_template('error.html', message="Страница не найдена. Проверьте URL и попробуйте снова."), 404
 
 @app.errorhandler(500)
 def internal_error(error):
+    logger.error(f"500 Error: {str(error)}")
     db.session.rollback()
     return render_template('error.html', message="Внутренняя ошибка сервера. Попробуйте позже."), 500
 
 # Маршруты
 @app.route('/')
 def root():
+    logger.info(f"Root request received. URL: {request.url}, Headers: {dict(request.headers)}")
     place_id = request.args.get('place_id')
     if place_id:
+        logger.info(f"Redirecting to index with place_id: {place_id}")
         return redirect(url_for('index', place_id=place_id))
     return render_template('error.html', message="Необходим параметр place_id в URL. Пример: /?place_id=your_place_id"), 400
 
-@app.route('/onboarding/')
-@app.route('/onboarding')
-def index():
+@app.route('/onboarding/', defaults={'path': ''})
+@app.route('/onboarding/<path:path>')
+def index(path=''):
+    logger.info(f"Onboarding request received. Path: {path}, URL: {request.url}, Headers: {dict(request.headers)}")
     place_id = request.args.get('place_id')
     if not place_id:
+        logger.warning("No place_id provided in onboarding request")
         return render_template('error.html', message="Необходим параметр place_id в URL. Пример: /onboarding/?place_id=your_place_id"), 400
+    logger.info(f"Rendering template for place_id: {place_id}")
     return render_template('index.html', place_id=place_id)
 
 @app.route('/api/submit', methods=['POST'])
 @app.route('/onboarding/api/submit', methods=['POST'])
 def submit():
     try:
+        logger.info(f"Submit request received. URL: {request.url}, Form data: {request.form}")
         place_id = request.form.get('place_id')
         user_name = request.form.get('user_name')
         user_surname = request.form.get('user_surname')
@@ -67,6 +79,7 @@ def submit():
         user_image = request.files.get('user_image')
 
         if not all([place_id, user_name, user_surname, emp_position, user_image]):
+            logger.warning("Missing required fields in submission")
             return jsonify({
                 'status': 'error',
                 'message': 'Все поля обязательны для заполнения'
@@ -76,6 +89,7 @@ def submit():
         filename = secure_filename(f"{place_id}_{user_surname}_{user_name}.jpg")
         image_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         user_image.save(image_path)
+        logger.info(f"Image saved: {image_path}")
 
         # Создаем пользователя
         new_user = User(
@@ -88,6 +102,7 @@ def submit():
         )
         db.session.add(new_user)
         db.session.commit()
+        logger.info(f"New user created: {new_user.id}")
 
         return jsonify({
             'status': 'success',
@@ -105,7 +120,7 @@ def submit():
         }), 200
 
     except Exception as e:
-        app.logger.error(f"Error in submit: {str(e)}")
+        logger.error(f"Error in submit: {str(e)}", exc_info=True)
         return jsonify({
             'status': 'error',
             'message': str(e)
@@ -114,6 +129,7 @@ def submit():
 @app.route('/api/users/<place_id>')
 @app.route('/onboarding/api/users/<place_id>')
 def get_users(place_id):
+    logger.info(f"Getting users for place_id: {place_id}")
     users = User.query.filter_by(place_id=place_id).all()
     return jsonify([{
         'id': user.id,
@@ -127,7 +143,6 @@ def get_users(place_id):
     } for user in users])
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
     with app.app_context():
         db.create_all()
     app.run(host='0.0.0.0', port=5001)
