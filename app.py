@@ -1,9 +1,9 @@
-import os
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
+import os
 import logging
 
 app = Flask(__name__)
@@ -31,12 +31,18 @@ class User(db.Model):
     checkin_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 @app.route('/')
+def root():
+    place_id = request.args.get('place_id')
+    if place_id:
+        return redirect(url_for('index', place_id=place_id))
+    return render_template('error.html', message="Необходим параметр place_id в URL. Пример: /?place_id=your_place_id"), 400
+
 @app.route('/onboarding')
 @app.route('/onboarding/')
 def index():
     place_id = request.args.get('place_id')
     if not place_id:
-        return render_template('error.html', message="Необходим параметр place_id в URL. Пример: /?place_id=your_place_id"), 400
+        return render_template('error.html', message="Необходим параметр place_id в URL. Пример: /onboarding/?place_id=your_place_id"), 400
     return render_template('index.html', place_id=place_id)
 
 @app.route('/api/submit', methods=['POST'])
