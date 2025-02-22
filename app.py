@@ -30,6 +30,17 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     checkin_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+# Обработка ошибок
+@app.errorhandler(404)
+def not_found_error(error):
+    return render_template('error.html', message="Страница не найдена. Проверьте URL и попробуйте снова."), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    return render_template('error.html', message="Внутренняя ошибка сервера. Попробуйте позже."), 500
+
+# Маршруты
 @app.route('/')
 def root():
     place_id = request.args.get('place_id')
@@ -37,8 +48,8 @@ def root():
         return redirect(url_for('index', place_id=place_id))
     return render_template('error.html', message="Необходим параметр place_id в URL. Пример: /?place_id=your_place_id"), 400
 
-@app.route('/onboarding')
 @app.route('/onboarding/')
+@app.route('/onboarding')
 def index():
     place_id = request.args.get('place_id')
     if not place_id:
@@ -94,6 +105,7 @@ def submit():
         }), 200
 
     except Exception as e:
+        app.logger.error(f"Error in submit: {str(e)}")
         return jsonify({
             'status': 'error',
             'message': str(e)
