@@ -33,8 +33,10 @@ class User(db.Model):
     user_image = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-@app.route('/onboarding')
+# Базовый маршрут для формы
+@app.route('/')
 @app.route('/onboarding/')
+@app.route('/onboarding')
 def index():
     place_id = request.args.get('place_id')
     app.logger.info(f"Received request with place_id: {place_id}")
@@ -44,6 +46,8 @@ def index():
     app.logger.info(f"Rendering template for place_id: {place_id}")
     return render_template('index.html', place_id=place_id)
 
+# API маршруты
+@app.route('/api/submit', methods=['POST'])
 @app.route('/onboarding/api/submit', methods=['POST'])
 def submit():
     app.logger.info("Received form submission")
@@ -84,15 +88,19 @@ def submit():
         app.logger.error(f"Error processing submission: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/users/<place_id>')
 @app.route('/onboarding/api/users/<place_id>')
 def get_users(place_id):
     app.logger.info(f"Received request for users with place_id: {place_id}")
     users = User.query.filter_by(place_id=place_id).all()
     app.logger.info(f"Found {len(users)} users with place_id: {place_id}")
     return jsonify([{
+        'id': user.id,
+        'place_id': user.place_id,
         'user_name': user.user_name,
         'user_surname': user.user_surname,
         'emp_position': user.emp_position,
+        'user_image': user.user_image,
         'created_at': user.created_at.isoformat()
     } for user in users])
 
