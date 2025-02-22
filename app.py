@@ -30,7 +30,7 @@ class User(db.Model):
     user_image = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-@app.route('/')
+@app.route('/onboarding/')
 def index():
     place_id = request.args.get('place_id')
     app.logger.info(f"Received request with place_id: {place_id}")
@@ -40,51 +40,47 @@ def index():
     app.logger.info(f"Rendering template for place_id: {place_id}")
     return render_template('index.html', place_id=place_id)
 
-@app.route('/api/submit', methods=['POST'])
+@app.route('/onboarding/api/submit', methods=['POST'])
 def submit():
+    app.logger.info("Received form submission")
     try:
-        data = request.form
-        place_id = data.get('place_id')
-        user_name = data.get('user_name')
-        user_surname = data.get('user_surname')
-        emp_position = data.get('emp_position')
+        place_id = request.form.get('place_id')
+        user_name = request.form.get('user_name')
+        user_surname = request.form.get('user_surname')
+        emp_position = request.form.get('emp_position')
+        user_image = request.files.get('user_image')
 
-        if not all([place_id, user_name, user_surname, emp_position]):
-            app.logger.warning("Not all fields are provided")
-            return jsonify({'error': 'All fields are required'}), 400
+        app.logger.info(f"Processing submission for place_id: {place_id}")
 
-        image_file = request.files.get('user_image')
-        image_path = None
+        if not all([place_id, user_name, user_surname, emp_position, user_image]):
+            app.logger.warning("Missing required fields")
+            return jsonify({'error': 'Все поля обязательны для заполнения'}), 400
 
-        if image_file:
-            filename = secure_filename(f"{place_id}_{datetime.utcnow().timestamp()}.jpg")
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            image_file.save(filepath)
-            image_path = filepath
-            app.logger.info(f"Image saved to {image_path}")
+        # Save the image
+        filename = secure_filename(f"{place_id}_{user_surname}_{user_name}.jpg")
+        image_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        user_image.save(image_path)
+        app.logger.info(f"Saved image to: {image_path}")
 
-        user = User(
+        # Create new user
+        new_user = User(
             place_id=place_id,
             user_name=user_name,
             user_surname=user_surname,
             emp_position=emp_position,
-            user_image=image_path
+            user_image=filename
         )
-
-        db.session.add(user)
+        db.session.add(new_user)
         db.session.commit()
-        app.logger.info(f"User created with place_id: {place_id}")
+        app.logger.info("Successfully saved user to database")
 
-        return jsonify({
-            'status': 'success',
-            'message': 'Data saved successfully'
-        })
+        return jsonify({'message': 'Данные успешно сохранены'}), 200
 
     except Exception as e:
-        app.logger.error(f"Error occurred: {str(e)}")
+        app.logger.error(f"Error processing submission: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/users/<place_id>')
+@app.route('/onboarding/api/users/<place_id>')
 def get_users(place_id):
     app.logger.info(f"Received request for users with place_id: {place_id}")
     users = User.query.filter_by(place_id=place_id).all()
