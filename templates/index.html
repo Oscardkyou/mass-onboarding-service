@@ -151,7 +151,8 @@
                 formData.append('user_image', blob, 'selfie.jpg');
 
                 try {
-                    const response = await fetch('/api/submit', {
+                    const base = document.querySelector('base')?.getAttribute('href') || '/onboarding';
+                    const response = await fetch(`${base}/api/submit`, {
                         method: 'POST',
                         body: formData
                     });
