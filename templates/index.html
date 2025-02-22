@@ -53,7 +53,7 @@
                         <h2 class="card-title text-center mb-4">Онбординг сотрудника</h2>
                         <form id="onboardingForm" method="post" enctype="multipart/form-data">
                             <input type="hidden" name="place_id" value="{{ place_id }}">
-                            
+
                             <div class="mb-3">
                                 <label for="user_name" class="form-label">Имя</label>
                                 <input type="text" class="form-control" id="user_name" name="user_name" required>
@@ -96,6 +96,7 @@
 
     <script>
         let stream;
+        let wsReconnectTimeout;
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const preview = document.getElementById('preview');
@@ -105,6 +106,9 @@
 
         async function startCamera() {
             try {
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                }
                 stream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: "user" },
                     audio: false
@@ -117,7 +121,47 @@
             }
         }
 
-        document.addEventListener('DOMContentLoaded', startCamera);
+        function connectWebSocket() {
+            const ws = new WebSocket('wss://www.foqus-portal.live/ws');
+
+            ws.onopen = () => {
+                console.log('WebSocket connection established');
+                if (wsReconnectTimeout) {
+                    clearTimeout(wsReconnectTimeout);
+                    wsReconnectTimeout = null;
+                }
+            };
+
+            ws.onclose = (event) => {
+                console.log(`WebSocket connection closed: Code=${event.code}, Reason=${event.reason}`);
+                if (!wsReconnectTimeout) {
+                    wsReconnectTimeout = setTimeout(() => {
+                        console.log('Attempting reconnection...');
+                        connectWebSocket();
+                    }, 5000);
+                }
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('Received message:', data);
+                    if (data.status === 'success' && data.data) {
+                        // Обработка успешного ответа
+                        console.log('Successfully processed data:', data.data);
+                    }
+                } catch (error) {
+                    console.error('Error processing WebSocket message:', error);
+                }
+            };
+
+            return ws;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            startCamera();
+            connectWebSocket();
+        });
 
         takePhotoBtn.addEventListener('click', () => {
             if (!video.videoWidth) return;
@@ -139,6 +183,7 @@
             retakePhotoBtn.style.display = 'none';
             takePhotoBtn.style.display = 'block';
             photoTaken = false;
+            startCamera();
         });
 
         document.getElementById('onboardingForm').addEventListener('submit', async (e) => {
@@ -161,11 +206,14 @@
                             body: formData
                         });
 
-                        if (!response.ok) throw new Error('Network response was not ok');
-
                         const result = await response.json();
-                        alert('Данные успешно отправлены!');
-                        window.location.reload();
+
+                        if (response.ok && result.status === 'success') {
+                            alert('Данные успешно отправлены!');
+                            window.location.reload();
+                        } else {
+                            throw new Error(result.message || 'Произошла ошибка при отправке данных');
+                        }
                     } catch (error) {
                         console.error('Error:', error);
                         alert('Ошибка при отправке данных: ' + error.message);
@@ -174,6 +222,16 @@
             } catch (error) {
                 console.error('Error:', error);
                 alert('Ошибка при обработке фото');
+            }
+        });
+
+        // Очистка при уходе со страницы
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            if (wsReconnectTimeout) {
+                clearTimeout(wsReconnectTimeout);
             }
         });
     </script>
