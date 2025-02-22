@@ -8,16 +8,19 @@ import base64
 import logging
 
 app = Flask(__name__)
+
+# Поддержка проксирования
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-# Настраиваем базовый путь
-app.config['APPLICATION_ROOT'] = '/onboarding'
+# Настройки приложения
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///onboarding.db'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max-limit
+
+# Инициализируем базу данных
 db = SQLAlchemy(app)
 
-# load the uploads folder if it does not exist
+# Создаем папку uploads если её нет
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
 
@@ -30,6 +33,7 @@ class User(db.Model):
     user_image = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+@app.route('/onboarding')
 @app.route('/onboarding/')
 def index():
     place_id = request.args.get('place_id')
