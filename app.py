@@ -40,22 +40,22 @@ class User(db.Model):
 # Обработка ошибок
 @app.errorhandler(404)
 def not_found_error(error):
-    logger.error(f"404 Error: {request.url}")
+    app.logger.error(f"404 Error: {request.url}")
     return render_template('error.html', message="Страница не найдена. Проверьте URL и попробуйте снова."), 404
 
 @app.errorhandler(500)
 def internal_error(error):
-    logger.error(f"500 Error: {str(error)}")
+    app.logger.error(f"500 Error: {str(error)}")
     db.session.rollback()
     return render_template('error.html', message="Внутренняя ошибка сервера. Попробуйте позже."), 500
 
 # Маршруты
 @app.route('/')
 def root():
-    logger.info(f"Root request received. Path: {request.path}")
-    logger.info(f"Full URL: {request.url}")
-    logger.info(f"Headers: {dict(request.headers)}")
-    logger.info(f"Args: {dict(request.args)}")
+    app.logger.info(f"Root request received. Path: {request.path}")
+    app.logger.info(f"Full URL: {request.url}")
+    app.logger.info(f"Headers: {dict(request.headers)}")
+    app.logger.info(f"Args: {dict(request.args)}")
     
     place_id = request.args.get('place_id')
     if place_id:
@@ -64,84 +64,87 @@ def root():
 
 @app.route('/onboarding/')
 def index():
-    logger.info(f"Request received. Path: {request.path}")
-    logger.info(f"Full URL: {request.url}")
-    logger.info(f"Headers: {dict(request.headers)}")
-    logger.info(f"Args: {dict(request.args)}")
+    app.logger.info(f"Request received. Path: {request.path}")
+    app.logger.info(f"Full URL: {request.url}")
+    app.logger.info(f"Headers: {dict(request.headers)}")
+    app.logger.info(f"Args: {dict(request.args)}")
     
     place_id = request.args.get('place_id')
+    app.logger.info(f'Accessing onboarding page with place_id: {place_id}')
+    
     if not place_id:
-        logger.warning("No place_id provided")
+        app.logger.warning('No place_id provided in request')
         return render_template('error.html', message="Необходим параметр place_id в URL. Пример: /onboarding/?place_id=your_place_id"), 400
     
-    logger.info(f"Rendering template for place_id: {place_id}")
     return render_template('index.html', place_id=place_id)
 
 # API endpoints
 @app.route('/onboarding/api/submit', methods=['POST'])
 def submit():
+    app.logger.info('Received submission request')
     try:
-        logger.info(f"Submit request received. URL: {request.url}")
-        logger.info(f"Headers: {dict(request.headers)}")
-        logger.info(f"Form data: {dict(request.form)}")
-        
-        place_id = request.form.get('place_id')
+        if 'user_image' not in request.files:
+            app.logger.error('No user_image in request')
+            return jsonify({'status': 'error', 'message': 'Фото не найдено'}), 400
+
         user_name = request.form.get('user_name')
         user_surname = request.form.get('user_surname')
         emp_position = request.form.get('emp_position')
-        user_image = request.files.get('user_image')
+        place_id = request.form.get('place_id')
 
-        if not all([place_id, user_name, user_surname, emp_position, user_image]):
-            logger.warning("Missing required fields in submission")
+        app.logger.info(f'Processing submission for {user_name} {user_surname} at {place_id}')
+
+        if not all([user_name, user_surname, emp_position, place_id]):
+            app.logger.error('Missing required fields in submission')
+            return jsonify({'status': 'error', 'message': 'Все поля обязательны для заполнения'}), 400
+
+        file = request.files['user_image']
+        if file.filename == '':
+            app.logger.error('Empty filename in user_image')
+            return jsonify({'status': 'error', 'message': 'Файл не выбран'}), 400
+
+        if file:
+            filename = secure_filename(f"{place_id}_{user_surname}_{user_name}.jpg")
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            app.logger.info(f'Saved image to {filepath}')
+
+            new_user = User(
+                place_id=place_id,
+                user_name=user_name,
+                user_surname=user_surname,
+                emp_position=emp_position,
+                user_image=filename,
+                checkin_at=datetime.utcnow()
+            )
+            
+            db.session.add(new_user)
+            db.session.commit()
+            app.logger.info(f'Successfully saved user data to database')
+
             return jsonify({
-                'status': 'error',
-                'message': 'Все поля обязательны для заполнения'
-            }), 400
-
-        # Сохраняем изображение
-        filename = secure_filename(f"{place_id}_{user_surname}_{user_name}.jpg")
-        image_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        user_image.save(image_path)
-        logger.info(f"Image saved: {image_path}")
-
-        # Создаем пользователя
-        new_user = User(
-            place_id=place_id,
-            user_name=user_name,
-            user_surname=user_surname,
-            emp_position=emp_position,
-            user_image=filename,
-            checkin_at=datetime.utcnow()
-        )
-        db.session.add(new_user)
-        db.session.commit()
-        logger.info(f"New user created: {new_user.id}")
-
-        return jsonify({
-            'status': 'success',
-            'message': 'Данные успешно сохранены',
-            'data': {
-                'id': new_user.id,
-                'place_id': new_user.place_id,
-                'user_name': new_user.user_name,
-                'user_surname': new_user.user_surname,
-                'emp_position': new_user.emp_position,
-                'user_image': new_user.user_image,
-                'created_at': new_user.created_at.isoformat(),
-                'checkin_at': new_user.checkin_at.isoformat()
-            }
-        }), 200
+                'status': 'success',
+                'message': 'Данные успешно сохранены',
+                'data': {
+                    'id': new_user.id,
+                    'place_id': new_user.place_id,
+                    'user_name': new_user.user_name,
+                    'user_surname': new_user.user_surname,
+                    'emp_position': new_user.emp_position,
+                    'user_image': new_user.user_image,
+                    'created_at': new_user.created_at.isoformat(),
+                    'checkin_at': new_user.checkin_at.isoformat()
+                }
+            }), 200
 
     except Exception as e:
-        logger.error(f"Error in submit: {str(e)}", exc_info=True)
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
+        app.logger.error(f'Error processing submission: {str(e)}')
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/onboarding/api/users/<place_id>')
 def get_users(place_id):
-    logger.info(f"Getting users for place_id: {place_id}")
+    app.logger.info(f"Getting users for place_id: {place_id}")
     users = User.query.filter_by(place_id=place_id).all()
     return jsonify([{
         'id': user.id,
