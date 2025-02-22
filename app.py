@@ -48,25 +48,18 @@ def internal_error(error):
 
 # Маршруты
 @app.route('/')
-def root():
-    logger.info(f"Root request received. URL: {request.url}, Headers: {dict(request.headers)}")
-    place_id = request.args.get('place_id')
-    if place_id:
-        logger.info(f"Redirecting to index with place_id: {place_id}")
-        return redirect(url_for('index', place_id=place_id))
-    return render_template('error.html', message="Необходим параметр place_id в URL. Пример: /?place_id=your_place_id"), 400
-
-@app.route('/onboarding/', defaults={'path': ''})
-@app.route('/onboarding/<path:path>')
-def index(path=''):
-    logger.info(f"Onboarding request received. Path: {path}, URL: {request.url}, Headers: {dict(request.headers)}")
+@app.route('/onboarding')
+@app.route('/onboarding/')
+def index():
+    logger.info(f"Request received. URL: {request.url}, Headers: {dict(request.headers)}")
     place_id = request.args.get('place_id')
     if not place_id:
-        logger.warning("No place_id provided in onboarding request")
+        logger.warning("No place_id provided")
         return render_template('error.html', message="Необходим параметр place_id в URL. Пример: /onboarding/?place_id=your_place_id"), 400
     logger.info(f"Rendering template for place_id: {place_id}")
     return render_template('index.html', place_id=place_id)
 
+# API endpoints
 @app.route('/api/submit', methods=['POST'])
 @app.route('/onboarding/api/submit', methods=['POST'])
 def submit():
