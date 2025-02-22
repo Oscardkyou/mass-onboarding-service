@@ -11,12 +11,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+
+# Настройка для работы за прокси
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 # Конфигурация
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///onboarding.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///instance/onboarding.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max-limit
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max-limit
 
 db = SQLAlchemy(app)
 
@@ -48,23 +51,40 @@ def internal_error(error):
 
 # Маршруты
 @app.route('/')
-@app.route('/onboarding')
+def root():
+    logger.info(f"Root request received. Path: {request.path}")
+    logger.info(f"Full URL: {request.url}")
+    logger.info(f"Headers: {dict(request.headers)}")
+    logger.info(f"Args: {dict(request.args)}")
+    
+    place_id = request.args.get('place_id')
+    if place_id:
+        return redirect(url_for('index', place_id=place_id))
+    return render_template('error.html', message="Необходим параметр place_id в URL. Пример: /?place_id=your_place_id"), 400
+
 @app.route('/onboarding/')
 def index():
-    logger.info(f"Request received. URL: {request.url}, Headers: {dict(request.headers)}")
+    logger.info(f"Request received. Path: {request.path}")
+    logger.info(f"Full URL: {request.url}")
+    logger.info(f"Headers: {dict(request.headers)}")
+    logger.info(f"Args: {dict(request.args)}")
+    
     place_id = request.args.get('place_id')
     if not place_id:
         logger.warning("No place_id provided")
         return render_template('error.html', message="Необходим параметр place_id в URL. Пример: /onboarding/?place_id=your_place_id"), 400
+    
     logger.info(f"Rendering template for place_id: {place_id}")
     return render_template('index.html', place_id=place_id)
 
 # API endpoints
-@app.route('/api/submit', methods=['POST'])
 @app.route('/onboarding/api/submit', methods=['POST'])
 def submit():
     try:
-        logger.info(f"Submit request received. URL: {request.url}, Form data: {request.form}")
+        logger.info(f"Submit request received. URL: {request.url}")
+        logger.info(f"Headers: {dict(request.headers)}")
+        logger.info(f"Form data: {dict(request.form)}")
+        
         place_id = request.form.get('place_id')
         user_name = request.form.get('user_name')
         user_surname = request.form.get('user_surname')
@@ -119,7 +139,6 @@ def submit():
             'message': str(e)
         }), 500
 
-@app.route('/api/users/<place_id>')
 @app.route('/onboarding/api/users/<place_id>')
 def get_users(place_id):
     logger.info(f"Getting users for place_id: {place_id}")
